@@ -17,6 +17,8 @@ This pilot uses synthetic brains with **known stiffness** to:
 3. build a trust map from physics that flags those failures,
 4. identify, from the data alone, which wave equation holds in each region.
 
+![One synthetic brain: true stiffness, simulated wave, amplitude, and what the scanner sees at 3 mm](figures/b_one_brain_wave.png)
+
 ## Pipeline
 
 ```
@@ -39,6 +41,9 @@ SynthSeg templates ──► A: synthetic brains (stiffness G′, damping ξ, in
 ```
 
 The 500 brains are split **by slice level** into 350 train / 75 validation / 75 test, so neighbouring slices never leak across splits. Every method was developed on the validation brains and run on the test brains **once**.
+
+![Stage A: synthetic brains (tissue, stiffness with inclusions, damping)](figures/a_qc_brains.png)
+*Synthetic brains: tissue labels (top), true stiffness with inclusions outlined (middle), damping (bottom).*
 
 ## Code
 
@@ -73,11 +78,14 @@ The 500 brains are split **by slice level** into 350 train / 75 validation / 75 
 | E6 | `stage_e6_model_selection.py` | Strong-form SINDy: which equation (uniform / varying / extra term) fits each 15 mm window |
 | E6b | `stage_e6b_weak_sindy.py` | Weak-form SINDy (Messenger & Bortz 2021): derivatives moved onto test functions for noise robustness |
 
-All outputs go to `mre_project/` (not in this repository: it holds several GB of generated data and can be rebuilt by running the scripts in order).
+Figures shown in this README are in `figures/`. All outputs go to `mre_project/` (not in this repository: it holds several GB of generated data and can be rebuilt by running the scripts in order).
 
 ## Key results (75 held-out test brains)
 
 **Simulator (C1).** Wavelength error < 0.6 %, second-order grid convergence. DI is exact on a fine grid but biased +10 % (1 kPa) to +2 % (5 kPa) at the 3 mm scanner resolution.
+
+![Checkpoint C1](figures/b_c1_checks.png)
+*Simulator matches theory (A), converges at second order (B); direct inversion is biased on the 3 mm grid (C).*
 
 **Network vs direct inversion (SNR 20).**
 
@@ -88,6 +96,9 @@ All outputs go to `mre_project/` (not in this repository: it holds several GB of
 | Inclusion contrast recovered | 22 % | 23 % | **35 %** |
 
 Within 4 mm of CSF (28 % of voxels), DI is undefined; ILI error is 10.2 %.
+
+![Single- vs multi-frequency network](figures/g_mf_vs_v1.png)
+*60 Hz network (v1) vs 40+60+80 Hz network (v3): lower error at every noise level and every distance from CSF.*
 
 **Trust map: how well it ranks badly wrong voxels (> 20 % error), AUC.**
 
@@ -100,6 +111,12 @@ Within 4 mm of CSF (28 % of voxels), DI is undefined; ILI error is 10.2 %.
 
 Keeping only the 10 % most trusted voxels cuts badly wrong voxels from 10.8 % to 1.7 %. Three-frequency physics adds a significant gain even at SNR 5, where 60 Hz physics alone adds nothing.
 
+![v2.1 trust map on test brains](figures/f3_v21_final.png)
+*v2.1 trust map: voxel AUC (A), region AUC (B), and how keeping only trusted voxels removes badly wrong ones (C).*
+
+![v3 trust map on test brains](figures/f5_mf_final.png)
+*v3 trust map: three-frequency physics (thick green) is best at every noise level.*
+
 **System identification: strong vs weak SINDy.**
 
 | Data | Finds true heterogeneity (AUC) | Physics-only stiffness error |
@@ -107,6 +124,12 @@ Keeping only the 10 % most trusted voxels cuts badly wrong voxels from 10.8 % to
 | Clean | 0.86 → **0.89** | 9.9 % → **5.4 %** |
 | SNR 20 | 0.54 → **0.68** | 21.7 % → **7.7 %** |
 | SNR 10 | 0.47 → **0.55** | 84.9 % → **11.6 %** |
+
+![Strong vs weak SINDy](figures/e6b_strong_vs_weak.png)
+*Weak-form SINDy (green) stays accurate under noise where strong-form (grey) breaks down.*
+
+![E6 model selection maps](figures/e6_maps.png)
+*Which equation fits where: light green uniform (M0), blue varying stiffness (M1), orange extra term (M3), purple both, grey nothing fits.*
 
 ## Limitations
 
