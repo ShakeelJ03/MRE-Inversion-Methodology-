@@ -1,25 +1,14 @@
-<div align="center">
+# MRE inversion with synthetic ground truth: a 2D pilot
 
-# MRE Inversion with Synthetic Ground Truth
+Neural-network stiffness inversion for brain MR elastography, trained and evaluated on synthetic brains with known stiffness, together with a physics-based reliability map and weak-form SINDy system identification.
 
-**A 2D pilot: neural-network stiffness inversion for brain MR elastography,<br>a physics-based trust map, and weak-form SINDy system identification**
+![One synthetic brain: true stiffness, simulated wave, amplitude, and what the scanner sees at 3 mm](figures/b_one_brain_wave.png)
 
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-CPU-F7931E?logo=scikitlearn&logoColor=white)
-![Status](https://img.shields.io/badge/status-pilot%20%C2%B7%20frozen-6c757d)
-![Data](https://img.shields.io/badge/data-synthetic-1D9E75)
-
-<img src="figures/b_one_brain_wave.png" width="95%" alt="One synthetic brain: true stiffness, simulated wave, amplitude, and what the scanner sees at 3 mm">
-
-<sub>One synthetic brain, end to end: true stiffness → simulated 60 Hz shear wave → wave amplitude → what the scanner sees at 3 mm.</sub>
-
-</div>
-
----
+*Figure: one synthetic brain, from true stiffness to the simulated 60 Hz shear wave, its amplitude, and the 3 mm data the inversion works on.*
 
 ## Contents
 
-- [Highlights](#highlights)
+- [Summary](#summary)
 - [Motivation](#motivation)
 - [Pipeline](#pipeline)
 - [Repository layout](#repository-layout)
@@ -30,33 +19,31 @@
 
 ---
 
-## Highlights
+## Summary
 
-| | |
-| --- | --- |
-| 🧠 **Network beats direct inversion** | 6.8 % median stiffness error vs 10.3 % for direct inversion (SNR 20); recovers 35 % of lesion contrast vs 22 % |
-| 🚦 **A trust map that physics measurably improves** | Voxel AUC 0.61 (near-CSF rule) → **0.72** (three-frequency physics); keeping the 10 % most trusted voxels cuts badly wrong voxels from 10.8 % to 1.7 % |
-| 🔍 **System identification that survives noise** | Weak-form SINDy: physics-only stiffness error at SNR 20 falls from 21.7 % (strong form) to **7.7 %** |
+- A multilayer perceptron trained on realistic brain patches reaches 6.8 % median stiffness error at SNR 20, against 10.3 % for direct inversion, and recovers 35 % of inclusion contrast against 22 %.
+- A reliability map combining a noise- and grid-debiased wave-equation check with anatomy and ensemble spread ranks badly wrong voxels with AUC 0.72 at SNR 20 (near-CSF baseline 0.61). Retaining the 10 % most reliable voxels reduces the fraction of voxels with more than 20 % error from 10.8 % to 1.7 %.
+- Weak-form SINDy identifies where the homogeneous-tissue assumption holds and estimates stiffness from the physics alone with 7.7 % median error at SNR 20, compared with 21.7 % for the strong form.
 
-Every method was developed on validation brains and run on the 75 held-out test brains **once**, with bootstrap 95 % intervals.
+All methods were developed on validation brains and applied once to 75 held-out test brains; uncertainty is reported as paired bootstrap 95 % intervals over brains.
 
 ---
 
 ## Motivation
 
-MR elastography (MRE) vibrates the head, images the shear waves travelling through the brain, and converts the wave pattern into a stiffness map. This step is called **inversion**. Brain stiffness changes with ageing and neurodegeneration, which makes it a promising biomarker.
+MR elastography (MRE) vibrates the head, images the shear waves travelling through the brain, and converts the wave pattern into a stiffness map. This step is called inversion. Brain stiffness changes with ageing and neurodegeneration, which makes it a promising biomarker.
 
 Standard inversion has two problems:
 
-1. It is **unreliable near CSF and tissue boundaries**, because it assumes the tissue is uniform around each voxel.
-2. It gives **no warning** when it is wrong, and real scans have no ground truth to check against.
+1. It is unreliable near CSF and tissue boundaries, because it assumes the tissue is uniform around each voxel.
+2. It gives no warning when it is wrong, and real scans have no ground truth to check against.
 
-This pilot uses synthetic brains with **known stiffness** to:
+This pilot uses synthetic brains with known stiffness to:
 
 1. train a neural network to do the inversion (following Murphy et al. 2018 and Scott et al. 2020),
 2. measure exactly where and why it fails,
-3. build a **trust map** from wave physics that flags those failures,
-4. identify from the data alone **which wave equation** holds in each region (SINDy; Brunton et al. 2016, Messenger & Bortz 2021).
+3. build a reliability map from wave physics that flags those failures,
+4. identify from the data alone which wave equation holds in each region (SINDy; Brunton et al. 2016, Messenger & Bortz 2021).
 
 ---
 
@@ -72,7 +59,7 @@ This pilot uses synthetic brains with **known stiffness** to:
         ▼
  ┌─────────────┐   2D anti-plane shear, conservative finite differences,
  │ B  Waves    │   solved at 0.5 mm, block-averaged to 3 mm (40 / 60 / 80 Hz)
- └──────┬──────┘   ✔ checkpoint C1: matches theory, 2nd-order convergence
+ └──────┬──────┘   checkpoint C1: matches theory, 2nd-order convergence
         ▼
  ┌─────────────┐   7×7 patches, noise at SNR 5–50
  │ C  Network  │   MLP ensembles (ILI realistic patches / HLI uniform patches)
@@ -83,7 +70,7 @@ This pilot uses synthetic brains with **known stiffness** to:
  └──────┬──────┘
         ▼
  ┌─────────────┐   wave-equation check (noise- and grid-debiased)
- │ E5  Trust   │   + anatomy + ensemble spread → probability a voxel is wrong
+ │ E5  Check   │   + anatomy + ensemble spread → probability a voxel is wrong
  └──────┬──────┘
         ▼
  ┌─────────────┐   which equation fits each 15 mm window?
@@ -91,10 +78,9 @@ This pilot uses synthetic brains with **known stiffness** to:
  └─────────────┘   strong form (E6) → weak form (E6b)
 ```
 
-<p align="center">
-<img src="figures/a_qc_brains.png" width="90%" alt="Synthetic brains: tissue labels, stiffness with inclusions, damping">
-<br><sub>Synthetic brains: tissue labels (top), true stiffness with inclusions outlined in cyan (middle), damping (bottom).</sub>
-</p>
+![Synthetic brains: tissue labels, stiffness with inclusions, damping](figures/a_qc_brains.png)
+
+*Synthetic brains: tissue labels (top), true stiffness with inclusions outlined in cyan (middle), damping (bottom).*
 
 ---
 
@@ -120,20 +106,20 @@ This pilot uses synthetic brains with **known stiffness** to:
 ├── stage_c3_patches_train_mf.py     v3   multi-frequency patches + network
 ├── stage_d1_evaluate.py             D    E2 / E3 / inclusion contrast
 ├── stage_d2_evaluate_mf.py          v3   multi-frequency evaluation
-├── stage_e1_trust_map.py            E5   trust map v1
+├── stage_e1_trust_map.py            E5   reliability map v1
 ├── stage_f1_predict_val.py          v2   validation predictions
-├── stage_f2_trust_v2.py             v2   trust map v2
-├── stage_f3_trust_v21.py            v2.1 debiased trust map (dev / final)
+├── stage_f2_trust_v2.py             v2   reliability map v2
+├── stage_f3_trust_v21.py            v2.1 debiased reliability map (dev / final)
 ├── stage_f4_bootstrap.py            v2.1 bootstrap over test brains
-├── stage_f5_trust_mf.py             v3   three-frequency trust map
+├── stage_f5_trust_mf.py             v3   three-frequency reliability map
 ├── stage_e6_model_selection.py      E6   strong-form SINDy
 └── stage_e6b_weak_sindy.py          E6b  weak-form SINDy
 ```
 
-Generated data (brains, waves, patches, models, predictions; several GB) is written to `mre_project/` and is **not** tracked. It can be rebuilt by running the scripts in order.
+Generated data (brains, waves, patches, models, predictions; several GB) is written to `mre_project/` and is not tracked. It can be rebuilt by running the scripts in order.
 
 <details>
-<summary><b>What each script does (click to expand)</b></summary>
+<summary>Script descriptions</summary>
 
 | Stage | Script | Purpose |
 | --- | --- | --- |
@@ -163,13 +149,13 @@ Generated data (brains, waves, patches, models, predictions; several GB) is writ
 
 All numbers are on the 75 held-out test brains.
 
-### 1 · The simulator is accurate
+### Simulator validation
 
 Wavelength error is below 0.6 % with second-order grid convergence. Direct inversion is exact on a fine grid but biased by +10 % (1 kPa) to +2 % (5 kPa) at the 3 mm scanner resolution, which the later physics checks correct for.
 
-<p align="center"><img src="figures/b_c1_checks.png" width="95%" alt="Checkpoint C1"></p>
+![Checkpoint C1](figures/b_c1_checks.png)
 
-### 2 · The network beats direct inversion
+### Network inversion versus direct inversion
 
 | SNR 20 | Direct inversion | HLI network | **ILI network** |
 | --- | :---: | :---: | :---: |
@@ -179,9 +165,9 @@ Wavelength error is below 0.6 % with second-order grid convergence. Direct inver
 
 Within 4 mm of CSF (28 % of voxels), direct inversion is undefined; the ILI network's error there is 10.2 %. Adding 40 and 80 Hz lowers the error at every noise level and every distance from CSF (7.6 % → 7.2 % over all voxels at SNR 20).
 
-<p align="center"><img src="figures/g_mf_vs_v1.png" width="80%" alt="Single- vs multi-frequency network"></p>
+![Single- vs multi-frequency network](figures/g_mf_vs_v1.png)
 
-### 3 · A trust map that flags wrong voxels
+### Reliability map
 
 How well each method ranks badly wrong voxels (> 20 % error) above good ones (AUC; 0.5 = guessing):
 
@@ -194,10 +180,10 @@ How well each method ranks badly wrong voxels (> 20 % error) above good ones (AU
 
 The physics gain is significant (bootstrap 95 % interval excludes zero) and grows as noise falls. At SNR 5, 60 Hz physics alone adds nothing, but three frequencies add +0.020 [0.009, 0.032]. Region-level maps (12 mm tiles) reach AUC 0.79–0.82.
 
-<p align="center"><img src="figures/f3_v21_final.png" width="95%" alt="v2.1 trust map"></p>
-<p align="center"><img src="figures/f5_mf_final.png" width="85%" alt="v3 trust map"></p>
+![v2.1 reliability map](figures/f3_v21_final.png)
+![v3 reliability map](figures/f5_mf_final.png)
 
-### 4 · System identification: which equation holds where?
+### System identification
 
 Candidate equations per 15 mm window: **M0** uniform tissue (the direct-inversion assumption), **M1** stiffness varies, **M3** extra term (identifiable only with several frequencies), **M1+3** both. Selection uses SINDy-style thresholding plus a significance test. Plain BIC was tried first and failed on clean data.
 
@@ -210,9 +196,9 @@ Candidate equations per 15 mm window: **M0** uniform tissue (the direct-inversio
 
 The strong form needs second derivatives of noisy data and breaks down. The weak form moves the derivatives onto smooth test functions and stays usable down to SNR 10. Where uniform tissue (M0) is selected, the network is badly wrong in only 4.1 % of voxels; where nothing fits, 14.7 %.
 
-<p align="center"><img src="figures/e6b_strong_vs_weak.png" width="95%" alt="Strong vs weak SINDy"></p>
-<p align="center"><img src="figures/e6_maps.png" width="90%" alt="Model selection maps"></p>
-<p align="center"><sub>Light green = uniform (M0) · blue = varying stiffness (M1) · orange = extra term (M3) · purple = both · grey = nothing fits.</sub></p>
+![Strong vs weak SINDy](figures/e6b_strong_vs_weak.png)
+![Model selection maps](figures/e6_maps.png)
+*Light green = uniform (M0) · blue = varying stiffness (M1) · orange = extra term (M3) · purple = both · grey = nothing fits.*
 
 ---
 
@@ -222,7 +208,7 @@ The strong form needs second derivatives of noisy data and breaks down. The weak
 | --- | --- |
 | 2D, synthetic data only | 3D simulation; real MRE data |
 | CSF simulated as a soft solid, so CSF "missing physics" cannot be detected | Fluid or poroelastic CSF model |
-| Physics gains are real but small (+0.01 to +0.03 AUC) | Feed weak-SINDy outputs into the trust map |
+| Physics gains are real but small (+0.01 to +0.03 AUC) | Feed weak-SINDy outputs into the reliability map |
 | Physics flags errors but cannot yet correct the network (r ≈ 0.05) | Weak-form residual as a training loss |
 | Inclusion contrast limited to ~35 % by the 7×7 patch | Larger receptive field (U-Net) |
 | Strong and weak SINDy scored on different voxel sets | Re-score on a common set |
@@ -279,6 +265,3 @@ Place the SynthSeg CN templates in `example/` (not included), then run the scrip
 20. Billot B et al. SynthSeg: segmentation of brain MRI scans of any contrast and resolution without retraining. *Med Image Anal* 2023;86:102789. [doi:10.1016/j.media.2023.102789](https://doi.org/10.1016/j.media.2023.102789)
 21. Efron B, Tibshirani RJ. *An Introduction to the Bootstrap.* Chapman & Hall/CRC, 1993.
 
----
-
-<div align="center"><sub>2D pilot · synthetic data · October 2026</sub></div>
